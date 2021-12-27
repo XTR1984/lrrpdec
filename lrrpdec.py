@@ -6,6 +6,8 @@ import os
 import queue
 import sys
 
+# disclaimer: скрипт написан с учебно-исследовательской целью, автор ни в коем случае не призывает и не планирует использовать во вред полученную с помощью скрипта информацию
+
 debug = 0
 class Logger:
     def  __init__(self):
@@ -195,7 +197,7 @@ def parseip(hexstr):
 def lrrpdecoder(src, udpdata):
     #второй байт - количество последующих байтов
     try:
-        if list(udpdata[:3]) == [0x09, 0x0E, 0x22]:     #090E2204000000015142822C62343178
+        if list(udpdata[:3]) == [0x09, 0x0E, 0x22]:     #090E22040000000151 42822C62343178
             logger.write("Unknown LRRP?")
         elif list(udpdata[:3]) == [0x0d, 0x15, 0x22]:   #0D152203000001 51 4BDE538F3B94F1E6 02436C0000561E
             decoder1(src, udpdata)   #скорые
