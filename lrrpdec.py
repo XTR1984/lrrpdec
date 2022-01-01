@@ -14,7 +14,10 @@ class Logger:
         self.logfile = open("lrrpdec.log","a+")
     def write(self, s):
         print(s)
-        self.logfile.write(str(s) + "\n")
+        try:
+            self.logfile.write(str(s) + "\n")
+        except Exception as e:
+            print(e)
     def close(self):
         self.logfile.close()
 
@@ -178,17 +181,23 @@ def parseip(hexstr):
             logger.write("ERROR in udp length")
             return
         
-        srcport=int.from_bytes(bs[20:24], "big")
+        srcport=int.from_bytes(bs[20:22], "big")
         destport=int.from_bytes(bs[22:24],"big")
         if destport == 4005:   #ARS      #45010028082300004011D0F60C008CB60DFAFAFA 0FA50FA50014E0F0 000AF0400533363032320000
             logger.write("ARS src = %d" %(src))
         elif destport == 4001: #LRRP
             lrrpdecoder(src, udpdata)
         elif destport == 4007: #TMS
-            msg = udpdata[6:]
-            msg = msg.decode(encoding="UTF-16") 
-            logger.write("TMS src=%s dest=%s msg=%s" %(srcip,dstip,msg))
-            
+            try:
+                msg = udpdata[6:]
+                msg = msg.decode(encoding="UTF-16") 
+                logger.write("TMS src=%s dest=%s msg=%s" %(srcip,dstip,msg))
+            except Exception as e:
+                logger.write(e)
+                pass
+        elif destport == 4104: #GR
+            logger.write("SBER")
+
         else:
             logger.write("Unknown UDP port %d" %(destport))
 
@@ -250,8 +259,6 @@ def decoder2(src, udpdata):
 
 
 
-#key1 =  "Data 45 00 00 "
-#key11 = "Data 45 80 00 "
 key2 =  "Data "
 key3 =  "Rate "
 gcounter = -1
@@ -276,7 +283,7 @@ with open('../DSD.log','r') as f:
                   slot = 0
             if debug:
                 logger.write("gc = %d, slot = %d, slot1state = %d slot2state = %d slot1data = %s slot2data=%s"  %(gcounter,slot, slot1state,slot2state,slot1data, slot2data))
-            if slot1state == 0 and slot == 1 and "Rate" in line and "Data" in line or ("MS Data" in line and "Rate" in line):
+            if slot1state == 0 and (slot == 1 or "MS DATA" in line) and ("Rate" in line and "Data" in line):
                     slot1state = 1
                     slot1data = ""
 
@@ -323,4 +330,3 @@ with open('../DSD.log','r') as f:
         time.sleep(1)        
 
 
-lfile.close()
