@@ -6,9 +6,12 @@ import os
 import queue
 import sys
 
-# disclaimer: скрипт написан с учебно-исследовательской целью, автор ни в коем случае не призывает и не планирует использовать во вред полученную с помощью скрипта информацию
+# disclaimer: 
+# скрипт написан с учебно-исследовательской целью, автор ни в коем случае не призывает и не планирует 
+# использовать во вред полученную с помощью скрипта информацию
 
-debug = 0
+DEBUG = 0
+UDPCHECKSUM= 1
 class Logger:
     def  __init__(self):
         self.logfile = open("lrrpdec.log","a+")
@@ -66,7 +69,7 @@ class Pcap:
 # pcap  #################
 
 today = datetime.today()
-fname = str(today.day) + str(today.month) +  "-" + f'{today.hour:02d}' + f'{today.minute:02d}' + f'{today.second:02d}'
+fname = f'{today.day:02d}{today.month:02d}-{today.hour:02d}{today.minute:02d}{today.second:02d}'
 
 if not os.path.exists("OLD"):
     os.makedirs("OLD")
@@ -140,6 +143,12 @@ def checksum(pkt):
         s = ~s
         return (((s>>8)&0xff)|s<<8) & 0xffff
 
+try:
+    import specdecoder
+except Exception as e:
+    logger.write(e)
+                
+
 
 def parseip(hexstr):
     if len(hexstr)<1:
@@ -174,15 +183,30 @@ def parseip(hexstr):
     if bs[9] == 1: #ICMP
         logger.write("ICMP protocol src=%s dest=%s" %(srcip,dstip) )   
     if bs[9] == 17: #UDP protocol
-        #pseudoudp = bs[12:20] + [0,17] + 
         udpdata = bs[28:]
-        udplength = int.from_bytes(bs[24:26], "big")
+        bs_udplength = bs[24:26]
+        bs_udpchecksum = bs[26:28]
+        udplength = int.from_bytes(bs_udplength, "big")
         if len(udpdata)!= udplength - 8:
             logger.write("ERROR in udp length")
             return
+        bs_srcport = bs[20:22]
+        bs_destport = bs[22:24]
+        srcport=int.from_bytes(bs_srcport, "big")
+        destport=int.from_bytes(bs_destport,"big")
+
+        if UDPCHECKSUM:
+            #pseudoudp src dest 0 proto udplen srcport srcdest datalen checksum data
+            bs_srcdest = bs[12:20]
+            proto = b'\x00\x11'
+            pseudopacket = bs_srcdest + proto + bs_udplength + bs_srcport + bs_destport + bs_udplength + bs_udpchecksum + udpdata
+            checksuma = checksum(pseudopacket)
+            #checksumh = int.from_bytes(bs_udpchecksum,"big")
+            #logger.write("SUM = %d  in header = %d" %(checksuma, checksumh))            
+            if checksuma !=0:
+                logger.write("ERROR in UDP checksum")
+                return
         
-        srcport=int.from_bytes(bs[20:22], "big")
-        destport=int.from_bytes(bs[22:24],"big")
         if destport == 4005:   #ARS      #45010028082300004011D0F60C008CB60DFAFAFA 0FA50FA50014E0F0 000AF0400533363032320000
             logger.write("ARS src = %d" %(src))
         elif destport == 4001: #LRRP
@@ -195,8 +219,15 @@ def parseip(hexstr):
             except Exception as e:
                 logger.write(e)
                 pass
-        elif destport == 4104: #GR
-            logger.write("SBER")
+        elif destport == 4104: #SB
+            if 'specdecoder' in sys.modules:
+                results = {}
+                r = specdecoder.decoder4104(src,udpdata,results)
+                if r:
+                    logger.write("SB " + results["lrrp"])
+                    lrrpwriter.write(results["lrrp"])
+            else:
+                logger.write("SB")
 
         else:
             logger.write("Unknown UDP port %d" %(destport))
@@ -219,7 +250,7 @@ def lrrpdecoder(src, udpdata):
         elif list(udpdata[:3]) == [0xd, 0x1A, 0x22]:    #0D1A220400000001341F973280C6 51 4BE8AED73B882B46 0352 6C 0215
             decoder2(src,udpdata)  
         else: 
-            logger.write("unknown")
+            logger.write("unknown lrrp")
     except Exception as e:
         logger.write(e)
 
@@ -281,7 +312,7 @@ with open('../DSD.log','r') as f:
                   slot = 2
             else:
                   slot = 0
-            if debug:
+            if DEBUG:
                 logger.write("gc = %d, slot = %d, slot1state = %d slot2state = %d slot1data = %s slot2data=%s"  %(gcounter,slot, slot1state,slot2state,slot1data, slot2data))
             if slot1state == 0 and (slot == 1 or "MS DATA" in line) and ("Rate" in line and "Data" in line):
                     slot1state = 1
