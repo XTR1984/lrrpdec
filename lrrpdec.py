@@ -5,10 +5,11 @@
 
 # настройки
 DEBUG = 0
-UDPCHECKSUM = 1
+UDPCHECKSUM = 1    #проверять контрольную сумму UDP данных
 SEEK2LOGEND = 1    #встаём в конец лога DSD
 MOVEOLD     = 0    #обнулять и перемещать *.lrrp и *.pcap в OLD при запуске
-
+SENDUDP     = 0    #отправлять udp пакеты в сеть
+SEND2IP    = "192.168.168.165"
 
 import time
 import struct
@@ -16,6 +17,7 @@ from datetime import datetime
 import os
 import queue
 import sys
+import socket
 
 
 try:
@@ -219,6 +221,9 @@ def parseip(hexstr):
                 logger.write("ERROR in UDP checksum")
                 return
         
+        if SENDUDP:
+            sendudp(destport,udpdata)
+
         if destport == 4005:   #ARS      #45010028082300004011D0F60C008CB60DFAFAFA 0FA50FA50014E0F0 000AF0400533363032320000
             logger.write("ARS src = %d srcip=%s destip = %s" %(src,srcip,dstip))
         elif destport == 4001: #LRRP
@@ -241,6 +246,11 @@ def parseip(hexstr):
             logger.write("Unknown UDP port %d. SRC = %d, srcip = %s, destip = %s " %(destport,src,srcip,dstip))
 
     pass
+
+def sendudp(destport, udpdata):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
+    sock.sendto(udpdata, (SEND2IP, destport))
+
 
 #разбор основных lrrp данных    
 def lrrpdecoder(src, udpdata):
