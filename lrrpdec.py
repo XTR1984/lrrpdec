@@ -1,4 +1,14 @@
 #!/usr/bin/python3
+# disclaimer: 
+# скрипт написан с учебно-исследовательской целью, автор ни в коем случае не призывает и не планирует 
+# использовать во вред полученную с помощью скрипта информацию
+
+# константы
+DEBUG = 0
+UDPCHECKSUM = 1
+SEEK2LOGEND = 1    #встаём в конец лога DSD
+
+
 import time
 import struct
 from datetime import datetime
@@ -6,12 +16,14 @@ import os
 import queue
 import sys
 
-# disclaimer: 
-# скрипт написан с учебно-исследовательской целью, автор ни в коем случае не призывает и не планирует 
-# использовать во вред полученную с помощью скрипта информацию
 
-DEBUG = 0
-UDPCHECKSUM= 1
+try:
+    import specdecoder
+except Exception as e:
+    logger.write(e)
+
+
+#класс логирования вывода
 class Logger:
     def  __init__(self):
         self.logfile = open("lrrpdec.log","a+")
@@ -26,6 +38,7 @@ class Logger:
 
 logger = Logger()
 
+#класс записи в pcap
 # pcap write grabbed from https://www.bitforestinfo.com/blog/01/13/save-python-raw-tcpip-packet-into-pcap-files.html
 #     Pcap Global Header Format :
 #                       ( magic number + 
@@ -68,6 +81,8 @@ class Pcap:
   self.pcap_file.close()
 # pcap  #################
 
+
+#
 today = datetime.today()
 fname = f'{today.day:02d}{today.month:02d}-{today.hour:02d}{today.minute:02d}{today.second:02d}'
 
@@ -95,7 +110,7 @@ except:
 dsdpcap =  Pcap("lrrpdec.pcap")
 
 
-
+#класс записи LRRP данных
 class lrrpwriter:
     def __init__(self,filename="DSDPlus.LRRP"):
         self.queue = queue.Queue()
@@ -143,13 +158,10 @@ def checksum(pkt):
         s = ~s
         return (((s>>8)&0xff)|s<<8) & 0xffff
 
-try:
-    import specdecoder
-except Exception as e:
-    logger.write(e)
+
                 
 
-
+# разбираем выхваченные IP-пакеты по протоколам и декодерам, пишем pcap
 def parseip(hexstr):
     if len(hexstr)<1:
         return
@@ -233,7 +245,8 @@ def parseip(hexstr):
             logger.write("Unknown UDP port %d" %(destport))
 
     pass
-    
+
+#разбор основных lrrp данных    
 def lrrpdecoder(src, udpdata):
     #второй байт - количество последующих байтов
     try:
@@ -279,7 +292,8 @@ def decoder2(src, udpdata):
                     speedrawl = int.from_bytes(udpdata[27:28],"big")
                     lat = latraw*180/0xFFFFFFFF
                     long = longraw*360/0xFFFFFFFF
-                    speed = (speedrawh + speedrawl/128.0)*3.6  # км/час
+                    #speed = (speedrawh + speedrawl/128.0)*3.6  # км/час
+                    speed = 0 # не пишем скорость поскольку lrrp.exe некрасиво рисует объекты с неизвестным курсом
                     course = courseraw*2
                     today = datetime.today()
                     s = today.strftime("%Y/%m/%d %H:%M:%S") + "   " + str(src) + " " + f'{lat:.5f}' + " " + f'{long:.5f}' + " " + f'{speed:.3f}' + " " + str(course) + "\n"
@@ -289,7 +303,10 @@ def decoder2(src, udpdata):
 
 
 
-
+#основной цикл по логу DSD, выхватываем hex данные и отправляем в разбор
+today = datetime.today()
+s= today.strftime("%Y/%m/%d %H:%M:%S")
+logger.write("Script started " + s)
 key2 =  "Data "
 key3 =  "Rate "
 gcounter = -1
@@ -301,6 +318,8 @@ slot = 0
 slot1data = ""
 slot2data = ""
 with open('../DSD.log','r') as f:
+    if SEEK2LOGEND:
+        f.seek(0,2)
     while True:
         for line in f:
             gcounter +=1
