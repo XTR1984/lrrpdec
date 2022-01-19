@@ -220,29 +220,25 @@ def parseip(hexstr):
                 return
         
         if destport == 4005:   #ARS      #45010028082300004011D0F60C008CB60DFAFAFA 0FA50FA50014E0F0 000AF0400533363032320000
-            logger.write("ARS src = %d" %(src))
+            logger.write("ARS src = %d srcip=%s destip = %s" %(src,srcip,dstip))
         elif destport == 4001: #LRRP
             lrrpdecoder(src, udpdata)
         elif destport == 4007: #TMS
             try:
                 msg = udpdata[6:]
                 msg = msg.decode(encoding="UTF-16") 
-                logger.write("TMS src=%s dest=%s msg=%s" %(srcip,dstip,msg))
+                logger.write("TMS src=%d srcip=%s destip=%s msg=%s" %(src, srcip,dstip,msg))
             except Exception as e:
                 logger.write(e)
                 pass
         elif destport == 4104: #SB
             if 'specdecoder' in sys.modules:
-                results = {}
-                r = specdecoder.decoder4104(src,udpdata,results)
-                if r:
-                    logger.write("SB " + results["lrrp"])
-                    lrrpwriter.write(results["lrrp"])
+                r = specdecoder.decoder4104(src,udpdata,logger,lrrpwriter)
             else:
                 logger.write("SB")
 
         else:
-            logger.write("Unknown UDP port %d" %(destport))
+            logger.write("Unknown UDP port %d. SRC = %d, srcip = %s, destip = %s " %(destport,src,srcip,destip))
 
     pass
 
@@ -251,7 +247,7 @@ def lrrpdecoder(src, udpdata):
     #второй байт - количество последующих байтов
     try:
         if list(udpdata[:3]) == [0x09, 0x0E, 0x22]:     #090E22040000000151 42822C62343178
-            logger.write("Unknown LRRP?")
+            logger.write("Unknown LRRP? SRC=%d" %(src))
         elif list(udpdata[:3]) == [0x0d, 0x15, 0x22]:   #0D152203000001 51 4BDE538F3B94F1E6 02436C0000561E
             decoder1(src, udpdata)   #скорые
         elif list(udpdata[:3]) == [0xd, 0x07, 0x22]:    #0D0722030000013710
@@ -263,7 +259,7 @@ def lrrpdecoder(src, udpdata):
         elif list(udpdata[:3]) == [0xd, 0x1A, 0x22]:    #0D1A220400000001341F973280C6 51 4BE8AED73B882B46 0352 6C 0215
             decoder2(src,udpdata)  
         else: 
-            logger.write("unknown lrrp")
+            logger.write("unknown lrrp? SRC=%d srcip=%s destip=%s" %(src,srcip,dstip))
     except Exception as e:
         logger.write(e)
 
