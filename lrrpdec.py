@@ -3,10 +3,11 @@
 # скрипт написан с учебно-исследовательской целью, автор ни в коем случае не призывает и не планирует 
 # использовать во вред полученную с помощью скрипта информацию
 
-# константы
+# настройки
 DEBUG = 0
 UDPCHECKSUM = 1
 SEEK2LOGEND = 1    #встаём в конец лога DSD
+MOVEOLD     = 0    #обнулять и перемещать *.lrrp и *.pcap в OLD при запуске
 
 
 import time
@@ -93,18 +94,17 @@ if not os.path.exists("../DSD.log"):
     logger.write("Не найден ../dsd.log. ")
     sys.exit()
 
-
-try:
-    if os.path.getsize("DSDPlus.LRRP")>0:
-        os.rename("DSDPlus.LRRP", "OLD/" + fname + ".LRRP")
-except:
-    pass
-
-try:
-    if os.path.getsize("lrrpdec.pcap")>0:
-        os.rename("lrrpdec.pcap", "OLD/" + fname + ".pcap")
-except:
-    pass
+if MOVEOLD:
+    try:
+        if os.path.getsize("DSDPlus.LRRP")>0:
+            os.rename("DSDPlus.LRRP", "OLD/" + fname + ".LRRP")
+    except:
+        pass
+    try:
+        if os.path.getsize("lrrpdec.pcap")>0:
+            os.rename("lrrpdec.pcap", "OLD/" + fname + ".pcap")
+    except:
+        pass
 
 
 dsdpcap =  Pcap("lrrpdec.pcap")
@@ -193,7 +193,7 @@ def parseip(hexstr):
     dstip = list(map(str, bs[16:20]))
     dstip = ".".join(dstip)
     if bs[9] == 1: #ICMP
-        logger.write("ICMP protocol src=%s dest=%s" %(srcip,dstip) )   
+        logger.write("ICMP protocol srcip=%s destip=%s" %(srcip,dstip) )   
     if bs[9] == 17: #UDP protocol
         udpdata = bs[28:]
         bs_udplength = bs[24:26]
@@ -238,7 +238,7 @@ def parseip(hexstr):
                 logger.write("SB")
 
         else:
-            logger.write("Unknown UDP port %d. SRC = %d, srcip = %s, destip = %s " %(destport,src,srcip,destip))
+            logger.write("Unknown UDP port %d. SRC = %d, srcip = %s, destip = %s " %(destport,src,srcip,dstip))
 
     pass
 
@@ -259,7 +259,7 @@ def lrrpdecoder(src, udpdata):
         elif list(udpdata[:3]) == [0xd, 0x1A, 0x22]:    #0D1A220400000001341F973280C6 51 4BE8AED73B882B46 0352 6C 0215
             decoder2(src,udpdata)  
         else: 
-            logger.write("unknown lrrp? SRC=%d srcip=%s destip=%s" %(src,srcip,dstip))
+            logger.write("unknown lrrp? SRC=%d" %(src))
     except Exception as e:
         logger.write(e)
 
