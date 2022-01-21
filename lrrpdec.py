@@ -253,59 +253,149 @@ def sendudp(destport, udpdata):
 
 
 #разбор основных lrrp данных    
-def lrrpdecoder(src, udpdata):
-    #второй байт - количество последующих байтов
-    try:
-        if list(udpdata[:3]) == [0x09, 0x0E, 0x22]:     #090E22040000000151 42822C62343178
-            logger.write("Unknown LRRP? SRC=%d" %(src))
-        elif list(udpdata[:3]) == [0x0d, 0x15, 0x22]:   #0D152203000001 51 4BDE538F3B94F1E6 02436C0000561E
-            decoder1(src, udpdata)   #скорые
-        elif list(udpdata[:3]) == [0xd, 0x07, 0x22]:    #0D0722030000013710
-            logger.write("LRRP Control ACK  SRC=%d"  %(src))
-        elif list(udpdata[:3]) == [0xd, 0x08, 0x22]:    #0D082204000000013710
-            logger.write("LRRP Control ACK  SRC=%d"  %(src)) 
-        elif list(udpdata[:3]) == [0xb, 0x07, 0x22]:  
-            logger.write("LRRP Control ACK  SRC=%d"  %(src))                
-        elif list(udpdata[:3]) == [0xd, 0x1A, 0x22]:    #0D1A220400000001341F973280C6 51 4BE8AED73B882B46 0352 6C 0215
-            decoder2(src,udpdata)  
-        else: 
-            logger.write("unknown lrrp? SRC=%d" %(src))
+LRRPPacketTypes =        { 0x05 : "ImmediateLocationRequest",
+                           0x07 : "ImmediateLocationResponse", 
+                           0x09 : "TriggeredLocationStartRequest",
+                           0x0B : "TriggeredLocationStartResponse",
+                           0x0D : "TriggeredLocationData",
+                           0x0F : "TriggeredLocationStopRequest",
+                           0x11 : "TriggeredLocationStopResponse",
+                           0x14 : "ProtocolVersionRequest",
+                           0x15 : "ProtocolVersionResponse"
+                         }
+def lrrpdecoder(src,udpdata):
+        result = parselrrp(udpdata)
+        logger.write(f"  {'Source':15} : {str(src):10}")
+        today = datetime.today()
+        time = today.strftime("%Y/%m/%d %H:%M:%S")
+        logger.write(f"  {'LocalTime':15} : {time}")
+        #if "Error" in result:
+        #    logger.write("  ERROR:" + result["Error"])
+        #else:
+        for key in result:
+                logger.write(f"  {key:15} : {str(result[key]):10}")
+        if "Latitude" in result:
+
+            lrrpstring = today.strftime("%Y/%m/%d %H:%M:%S") + "   "  + str(src) + " " 
+            lrrpstring +=  f'{result["Latitude"]} {result["Longitude"]} '
+            if "Speed" in result:
+                lrrpstring += f'{result["Speed"]} ' 
+            else:
+                lrrpstring += "0.0 "                
+            if "Direction" in result:
+                lrrpstring += f'{result["Direction"]} '
+            else:
+                lrrpstring += "0.0 "
+            lrrpwriter.write(lrrpstring + "\n")
+
+
+def parselrrp(udpdata):
+    result = {}
+    i = 0
+    try:    
+        packettype = udpdata[i]
+        if not packettype in LRRPPacketTypes:
+            result["Error"] = "Unknown packet type" 
+            return result
+        else:
+            result["PacketType"] =  LRRPPacketTypes[packettype]
+        if udpdata[2] != 0x22:
+            result["Error"] = "Not LRRP data"
+            return result
+        #result["Data"]= {}
+        reqidlen = udpdata[3]
+        requestID = int.from_bytes(udpdata[4:4+reqidlen], "big")
+        result["requestID"] = str(requestID)
+
+        i = 4 + reqidlen
+        while(i<len(udpdata)):
+                t = udpdata[i]  
+                i += 1
+                if t == 0x51:
+                    latraw = int.from_bytes(udpdata[i:i+4],"big")
+                    longraw = int.from_bytes(udpdata[i+4:i+8],"big")
+                    radiusraw = readFloat(udpdata[i+8:i+10])
+                    result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
+                    result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
+                    result["Radius"]    = f'{radiusraw:.2f}'
+                    i += 10
+
+                elif t == 0x34:
+                    result["RemoteTime"] = readDateTime(udpdata[i:i+5])
+                    i += 5
+                elif t == 0x37:
+                    responseCode = int.from_bytes(udpdata[i:i+1], "big")
+                    i += 2
+                    if responseCode & 0x80 != 00:
+                        responseCode = responseCode << 7 + udpdata[i]
+                        i += 1            
+                    result["ResponseCode"] = str(responseCode)
+                elif t == 0x38:
+                    responseCode = 0
+                    result["ResponseCode"] = str(responseCode)
+                elif t == 0x55:
+                    latraw = int.from_bytes(udpdata[i:i+4],"big")
+                    longraw = int.from_bytes(udpdata[i+4:i+8],"big")
+                    radius = readFloat(udpdata[i+8:i+10])
+                    altitude = readFloat(udpdata[i+10:i+12])
+                    accuracy = readFloat(udpdata[i+12:i+14])
+                    result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
+                    result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
+                    result["Radius"]    = f'{radius:.2f}'
+                    result["Altitude"] = f'{altitude:.2f}'
+                    result["Accuracy"] = f'{accuracy:.2f}'
+                    i += 14
+                elif t == 0x56:
+                    direction = int.from_bytes(udpdata[i:i+1],"big")*2
+                    result["Direction"] = str(direction)
+                    i += 1
+                elif t == 0x66:
+                    latraw = int.from_bytes(udpdata[i:i+4],"big")
+                    longraw = int.from_bytes(udpdata[i+4:i+8],"big")
+                    result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
+                    result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
+                    i += 8
+                elif t == 0x69:
+                    latraw = int.from_bytes(udpdata[i:i+4],"big")
+                    longraw = int.from_bytes(udpdata[i+4:i+8],"big")
+                    radius = readFloat(udpdata[i+8:i+10])
+                    altitude = readFloat(udpdata[i+10:i+12])
+                    result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
+                    result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
+                    result["Altitude"] = f'{altitude:.2f}'
+                    i += 4+4+2
+                elif t == 0x6C:
+                    speedraw  = readFloat(udpdata[i:i+2])
+                    speed = (speedraw)*2.23  # mph
+                    result["Speed"] = f'{speed:.3f}'
+                    i += 2
+                else:
+                    result["Error"] = f"Unknown LRRP tag {t:#x}" 
+                    return result
     except Exception as e:
         logger.write(e)
-
-
-def decoder1(src, udpdata):  
-                    latraw = int.from_bytes(udpdata[8:12],"big")
-                    longraw = int.from_bytes(udpdata[12:16],"big")
-                    courseraw = int.from_bytes(udpdata[22:23],"big")
-                    speedrawh = int.from_bytes(udpdata[19:20],"big")
-                    speedrawl = int.from_bytes(udpdata[20:21],"big")
-                    lat = latraw*180/0xFFFFFFFF
-                    long = longraw*360/0xFFFFFFFF
-                    speed = (speedrawh + speedrawl/128.0)*3.6  # км/час
-                    course = courseraw*2
-                    today = datetime.today()
-                    s = today.strftime("%Y/%m/%d %H:%M:%S") + "   " + str(src) + " " + f'{lat:.5f}' + " " + f'{long:.5f}' + " " + f'{speed:.3f}' + " " + str(course) + "\n"
-                    logger.write(s)
-                    lrrpwriter.write(s)
-
-def decoder2(src, udpdata):  
-                    latraw = int.from_bytes(udpdata[15:19],"big")
-                    longraw = int.from_bytes(udpdata[19:23],"big")
-                    #courseraw = int.from_bytes(udpdata[22:23],"big")
-                    courseraw = 0
-                    speedrawh = int.from_bytes(udpdata[26:27],"big")
-                    speedrawl = int.from_bytes(udpdata[27:28],"big")
-                    lat = latraw*180/0xFFFFFFFF
-                    long = longraw*360/0xFFFFFFFF
-                    #speed = (speedrawh + speedrawl/128.0)*3.6  # км/час
-                    speed = 0 # не пишем скорость поскольку lrrp.exe некрасиво рисует объекты с неизвестным курсом
-                    course = courseraw*2
-                    today = datetime.today()
-                    s = today.strftime("%Y/%m/%d %H:%M:%S") + "   " + str(src) + " " + f'{lat:.5f}' + " " + f'{long:.5f}' + " " + f'{speed:.3f}' + " " + str(course) + "\n"
-                    logger.write(s)
-                    lrrpwriter.write(s)
+    return result    
                     
+def readFloat(bs):
+    f = int(bs[0])
+    f += int(bs[1])*0.01
+    return f
+
+def readDateTime(bs):
+        year  = bs[0]<<6 | ( bs[1] >> 2 & 0x3f)
+        month = (bs[1]&3)<<2 | bs[2]>>6 & 3
+        day = bs[2] >>1 & 31
+        hour = ((bs[2] & 1) << 4) | (bs[3] >> 4 & 0xf)
+        minute  = (bs[3] & 15) << 2 | bs[4] >> 6 & 3
+        second = bs[4] & 0x3f
+        dt = datetime(year,month,day,hour,minute,second)
+        return dt.strftime("%Y/%m/%d %H:%M:%S")
+    
+ #090E22040000000151 42822C62343178
+ #0D152203000001 51 4BDE538F3B94F1E6 02436C0000561E
+ #0D0722030000013710
+ #0D082204000000013710
+ #0D1A220400000001341F973280C6 51 4BE8AED73B882B46 0352 6C 0215
 
 
 
