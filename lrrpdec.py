@@ -224,15 +224,18 @@ def parseip(hexstr):
         if SENDUDP:
             sendudp(destport,udpdata)
 
+        today = datetime.today()
+        time = today.strftime("%Y/%m/%d %H:%M:%S")
+
         if destport == 4005:   #ARS      #45010028082300004011D0F60C008CB60DFAFAFA 0FA50FA50014E0F0 000AF0400533363032320000
-            logger.write("ARS src = %d srcip=%s destip = %s" %(src,srcip,dstip))
+            logger.write("%s ARS src = %d srcip=%s destip = %s" %(time,src,srcip,dstip))
         elif destport == 4001: #LRRP
             lrrpdecoder(src, udpdata)
         elif destport == 4007: #TMS
             try:
                 msg = udpdata[6:]
                 msg = msg.decode(encoding="UTF-16") 
-                logger.write("TMS src=%d srcip=%s destip=%s msg=%s" %(src, srcip,dstip,msg))
+                logger.write("%s TMS src=%d srcip=%s destip=%s msg=%s" %(time, src, srcip,dstip,msg))
             except Exception as e:
                 logger.write(e)
                 pass
@@ -308,70 +311,102 @@ def parselrrp(udpdata):
         result["requestID"] = str(requestID)
 
         i = 4 + reqidlen
-        while(i<len(udpdata)):
-                t = udpdata[i]  
-                i += 1
-                if t == 0x51:
-                    latraw = int.from_bytes(udpdata[i:i+4],"big")
-                    longraw = int.from_bytes(udpdata[i+4:i+8],"big")
-                    radiusraw = readFloat(udpdata[i+8:i+10])
-                    result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
-                    result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
-                    result["Radius"]    = f'{radiusraw:.2f}'
-                    i += 10
-
-                elif t == 0x34:
-                    result["RemoteTime"] = readDateTime(udpdata[i:i+5])
-                    i += 5
-                elif t == 0x37:
-                    responseCode = int.from_bytes(udpdata[i:i+1], "big")
-                    i += 2
-                    if responseCode & 0x80 != 00:
-                        responseCode = responseCode << 7 + udpdata[i]
-                        i += 1            
-                    result["ResponseCode"] = str(responseCode)
-                elif t == 0x38:
-                    responseCode = 0
-                    result["ResponseCode"] = str(responseCode)
-                elif t == 0x55:
-                    latraw = int.from_bytes(udpdata[i:i+4],"big")
-                    longraw = int.from_bytes(udpdata[i+4:i+8],"big")
-                    radius = readFloat(udpdata[i+8:i+10])
-                    altitude = readFloat(udpdata[i+10:i+12])
-                    accuracy = readFloat(udpdata[i+12:i+14])
-                    result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
-                    result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
-                    result["Radius"]    = f'{radius:.2f}'
-                    result["Altitude"] = f'{altitude:.2f}'
-                    result["Accuracy"] = f'{accuracy:.2f}'
-                    i += 14
-                elif t == 0x56:
-                    direction = int.from_bytes(udpdata[i:i+1],"big")*2
-                    result["Direction"] = str(direction)
+        if packettype == 0xd or packettype==0x7 or packettype==0xb or packettype==0x11 :#LocationData and resp
+            while(i<len(udpdata)):
+                    t = udpdata[i]  
                     i += 1
-                elif t == 0x66:
-                    latraw = int.from_bytes(udpdata[i:i+4],"big")
-                    longraw = int.from_bytes(udpdata[i+4:i+8],"big")
-                    result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
-                    result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
-                    i += 8
-                elif t == 0x69:
-                    latraw = int.from_bytes(udpdata[i:i+4],"big")
-                    longraw = int.from_bytes(udpdata[i+4:i+8],"big")
-                    radius = readFloat(udpdata[i+8:i+10])
-                    altitude = readFloat(udpdata[i+10:i+12])
-                    result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
-                    result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
-                    result["Altitude"] = f'{altitude:.2f}'
-                    i += 4+4+2
-                elif t == 0x6C:
-                    speedraw  = readFloat(udpdata[i:i+2])
-                    speed = (speedraw)*2.23  # mph
-                    result["Speed"] = f'{speed:.3f}'
-                    i += 2
+                    if t == 0x51:
+                        latraw = int.from_bytes(udpdata[i:i+4],"big")
+                        longraw = int.from_bytes(udpdata[i+4:i+8],"big")
+                        radiusraw = readFloat(udpdata[i+8:i+10])
+                        result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
+                        result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
+                        result["Radius"]    = f'{radiusraw:.2f}'
+                        i += 10
+
+                    elif t == 0x34:
+                        result["RemoteTime"] = readDateTime(udpdata[i:i+5])
+                        i += 5
+                    elif t == 0x37:
+                        responseCode = int.from_bytes(udpdata[i:i+1], "big")
+                        i += 2
+                        if responseCode & 0x80 != 00:
+                            responseCode = responseCode << 7 + udpdata[i]
+                            i += 1            
+                        result["ResponseCode"] = str(responseCode)
+                    elif t == 0x38:
+                        responseCode = 0
+                        result["ResponseCode"] = str(responseCode)
+                    elif t == 0x55:
+                        latraw = int.from_bytes(udpdata[i:i+4],"big")
+                        longraw = int.from_bytes(udpdata[i+4:i+8],"big")
+                        radius = readFloat(udpdata[i+8:i+10])
+                        altitude = readFloat(udpdata[i+10:i+12])
+                        accuracy = readFloat(udpdata[i+12:i+14])
+                        result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
+                        result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
+                        result["Radius"]    = f'{radius:.2f}'
+                        result["Altitude"] = f'{altitude:.2f}'
+                        result["Accuracy"] = f'{accuracy:.2f}'
+                        i += 14
+                    elif t == 0x56:
+                        direction = int.from_bytes(udpdata[i:i+1],"big")*2
+                        result["Direction"] = str(direction)
+                        i += 1
+                    elif t == 0x66:
+                        latraw = int.from_bytes(udpdata[i:i+4],"big")
+                        longraw = int.from_bytes(udpdata[i+4:i+8],"big")
+                        result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
+                        result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
+                        i += 8
+                    elif t == 0x69:
+                        latraw = int.from_bytes(udpdata[i:i+4],"big")
+                        longraw = int.from_bytes(udpdata[i+4:i+8],"big")
+                        radius = readFloat(udpdata[i+8:i+10])
+                        altitude = readFloat(udpdata[i+10:i+12])
+                        result["Latitude"]  = f'{latraw*180/0xFFFFFFFF:.5f}'
+                        result["Longitude"] = f'{longraw*360/0xFFFFFFFF:.5f}'
+                        result["Altitude"] = f'{altitude:.2f}'
+                        i += 4+4+2
+                    elif t == 0x6C:
+                        speedraw  = readFloat(udpdata[i:i+2])
+                        speed = (speedraw)*2.23  # mph
+                        result["Speed"] = f'{speed:.3f}'
+                        i += 2
+                    else:
+                        result["Error"] = f"Unknown LRRP tag {t:#x}" 
+                        return result
+        if packettype == 0x5 or packettype==0x9:  # request
+            params = ""
+            while(i<len(udpdata)):
+                t = udpdata[i]
+                i +=1
+                if t==0x34:   #todo непонятка
+                    params += "TrigPeriod "
+                    if udpdata[i] == 0x31: 
+                        params += "0x31 "
+                        i+=2
+                    elif udpdata[i] == 0x78:
+                        params += "OnMove "
+                        i+=2
+                elif t==0x42:
+                    params += "GPIO "
+                elif t==0x50:
+                    params += "Accur "
+                elif t==0x51:
+                    params += "Accur Time "
+                elif t==0x52:
+                    params += "Time "
+                elif t==0x54:
+                    params += "Alt "
+                elif t==0x57:
+                    params += "Dir "
                 else:
-                    result["Error"] = f"Unknown LRRP tag {t:#x}" 
-                    return result
+                    params += "UnkTag "
+            result["ReqParams"] = params
+
+                    
+
     except Exception as e:
         logger.write(e)
     return result    
