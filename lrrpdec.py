@@ -20,10 +20,6 @@ import sys
 import socket
 
 
-try:
-    import specdecoder
-except Exception as e:
-    logger.write(e)
 
 
 #класс логирования вывода
@@ -40,6 +36,12 @@ class Logger:
         self.logfile.close()
 
 logger = Logger()
+
+try:
+    import specdecoder
+except Exception as e:
+    pass
+
 
 #класс записи в pcap
 # pcap write grabbed from https://www.bitforestinfo.com/blog/01/13/save-python-raw-tcpip-packet-into-pcap-files.html
