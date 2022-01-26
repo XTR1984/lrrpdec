@@ -10,6 +10,8 @@ SEEK2LOGEND = 1    #встаём в конец лога DSD
 MOVEOLD     = 0    #обнулять и перемещать *.lrrp и *.pcap в OLD при запуске
 SENDUDP     = 0    #отправлять udp пакеты в сеть
 SEND2IP    = "192.168.168.165"
+IGNOREDATAERROR = 1  #игнорировать сообщаемые ошибки в данных, возможно они исправлены
+
 
 import time
 import struct
@@ -18,7 +20,7 @@ import os
 import queue
 import sys
 import socket
-
+import re
 
 
 
@@ -456,8 +458,6 @@ with open('../DSD.log','r') as f:
     while True:
         for line in f:
             gcounter +=1
-            if "FAIL" in line:
-                continue
             if "slot1" in line[:30]:
                   slot = 1
             elif "slot2" in line[:30]: 
@@ -474,22 +474,37 @@ with open('../DSD.log','r') as f:
                     slot2state = 1
                     slot2data = ""
 
+            if slot1state == 1 and "no sync" in line:
+                     slot1state = 0
+                     parseip(slot1data)
+                     slot1data = ""
+                     continue
+
             if slot1state == 1 and slot == 1 or "MS DATA" in line:
                  if not "Rate" in line:
                      slot1state = 0
                      parseip(slot1data)
                      slot1data = ""
                      continue
-
-                 i = line.find("Data ")            
-                 i2 = line[i+4:].find("  ") 
-                 err = line[i:].find("ERR")
-                 if i == -1 or i2 == -1 or err>0 :
+                
+                 m = re.search(r"Data (.+?)  ", line)
+                 if m:
+                     data1 = m.group(1)
+                 
+                 else:
                      slot1state = 0
                      slot1data = ""
                      continue
-                 hex1 = line[i+4:i+4+i2]
-                 hex1 = hex1.replace(" ","")
+                 m = re.search(r"^ERR\d+ ", data1)
+                 if m:
+                     if IGNOREDATAERROR:
+                        data1 = data1[m.end():]
+                     else:
+                         slot1state = 0
+                         slot1data = ""
+                         continue
+                 
+                 hex1 = data1.replace(" ","")
                  slot1data = slot1data + hex1
 
             if slot2state == 1 and slot == 2:
@@ -499,15 +514,22 @@ with open('../DSD.log','r') as f:
                      slot2data = ""
                      continue
 
-                 i = line.find("Data ")            
-                 i2 = line[i+4:].find("  ") 
-                 err = line[i:].find("ERR")
-                 if i == -1 or i2 == -1 or err>0 :
-                     state2state = 0
+                 m = re.search(r"Data (.+?)  ",line)
+                 if m:
+                     data2 = m.group(1)
+                 else:
+                     slot2state = 0
                      slot2data = ""
                      continue
-                 hex2 = line[i+4:i+4+i2]
-                 hex2 = hex2.replace(" ","")
+                 m = re.search(r"^ERR\d+ ",data2)
+                 if m:
+                     if IGNOREDATAERROR:
+                        data2 = data2[m.end():]
+                     else:
+                         slot2state = 0
+                         slot2data = ""
+                         continue
+                 hex2 = data2.replace(" ","")
                  slot2data = slot2data + hex2     
         lrrpwriter.flush()               
         time.sleep(1)        
