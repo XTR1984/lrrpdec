@@ -6,7 +6,7 @@
 # настройки
 DEBUG = 0
 UDPCHECKSUM = 1    #проверять контрольную сумму UDP данных
-SEEK2LOGEND = 0    #встаём в конец лога DSD
+SEEK2LOGEND = 1    #встаём в конец лога DSD
 MOVEOLD     = 0    #обнулять и перемещать *.lrrp и *.pcap в OLD при запуске
 SENDUDP     = 0    #отправлять udp пакеты в сеть
 SEND2IP    = "192.168.168.165"
@@ -388,7 +388,12 @@ def parselrrp(udpdata):
             while(i<len(udpdata)):
                 t = udpdata[i]
                 i +=1
-                if t==0x34:   #todo непонятка
+                if t == 0x22:
+                        reqidlen = udpdata[i]
+                        requestID = int.from_bytes(udpdata[i:i+reqidlen], "big")
+                        result["requestID"] = str(requestID)
+                        i+= 1 + reqidlen
+                elif t==0x34:   #todo непонятка
                     params += "TrigPeriod "
                     if udpdata[i] == 0x31: 
                         params += "0x31 "
