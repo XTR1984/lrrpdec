@@ -6,7 +6,7 @@
 # настройки
 DEBUG = 0
 UDPCHECKSUM = 1    #проверять контрольную сумму UDP данных
-SEEK2LOGEND = 0    #встаём в конец лога DSD
+SEEK2LOGEND = 1    #встаём в конец лога DSD
 MOVEOLD     = 0    #обнулять и перемещать *.lrrp и *.pcap в OLD при запуске
 SENDUDP     = 0    #отправлять udp пакеты в сеть
 SEND2IP    = "192.168.168.165"
@@ -21,7 +21,6 @@ import queue
 import sys
 import socket
 import re
-
 
 
 
@@ -307,21 +306,19 @@ def parselrrp(udpdata):
             return result
         else:
             result["PacketType"] =  LRRPPacketTypes[packettype]
-        #if udpdata[2] != 0x22:
-        #    result["Error"] = "Not LRRP data"
-        #    return result
+        if udpdata[2] != 0x22:
+            result["Error"] = "Not LRRP data"
+            return result
         #result["Data"]= {}
-        
-        i = 2
+        reqidlen = udpdata[3]
+        requestID = int.from_bytes(udpdata[4:4+reqidlen], "big")
+        result["requestID"] = str(requestID)
+
+        i = 4 + reqidlen
         if packettype == 0xd or packettype==0x7 or packettype==0xb or packettype==0x11 :#LocationData and resp
             while(i<len(udpdata)):
                     t = udpdata[i]  
                     i += 1
-                    if t == 0x22:
-                        reqidlen = udpdata[i]
-                        requestID = int.from_bytes(udpdata[i:i+reqidlen], "big")
-                        result["requestID"] = str(requestID)
-                        i+= 1 + reqidlen
                     if t == 0x51:
                         latraw = int.from_bytes(udpdata[i:i+4],"big")
                         longraw = int.from_bytes(udpdata[i+4:i+8],"big")
