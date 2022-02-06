@@ -319,9 +319,10 @@ def parselrrp(udpdata):
                     i += 1
                     if t == 0x22:
                         reqidlen = udpdata[i]
+                        i += 1
                         requestID = int.from_bytes(udpdata[i:i+reqidlen], "big")
                         result["requestID"] = str(requestID)
-                        i+= 1 + reqidlen
+                        i+= reqidlen
                     elif t == 0x51:
                         latraw = int.from_bytes(udpdata[i:i+4],"big")
                         longraw = int.from_bytes(udpdata[i+4:i+8],"big")
@@ -390,9 +391,10 @@ def parselrrp(udpdata):
                 i +=1
                 if t == 0x22:
                         reqidlen = udpdata[i]
+                        i +=1
                         requestID = int.from_bytes(udpdata[i:i+reqidlen], "big")
                         result["requestID"] = str(requestID)
-                        i+= 1 + reqidlen
+                        i+= reqidlen
                 elif t==0x34:   #todo непонятка
                     params += "TrigPeriod "
                     if udpdata[i] == 0x31: 
